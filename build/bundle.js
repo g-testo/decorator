@@ -2024,11 +2024,24 @@ AFRAME.registerComponent('place-for-space', {
 				while (1) {
 					switch (_context.prev = _context.next) {
 						case 0:
-							_context.next = 2;
+							if (!altspace.inClient) {
+								_context.next = 6;
+								break;
+							}
+
+							_context.next = 3;
 							return altspace.getSpace();
 
-						case 2:
-							space = _context.sent;
+						case 3:
+							_context.t0 = _context.sent;
+							_context.next = 7;
+							break;
+
+						case 6:
+							_context.t0 = {};
+
+						case 7:
+							space = _context.t0;
 
 							console.log(space);
 							index = this.data.templates.indexOf(space.templateSid);
@@ -2039,7 +2052,7 @@ AFRAME.registerComponent('place-for-space', {
 								this.el.setAttribute('mixin', this.data.otherwise);
 							}
 
-						case 6:
+						case 11:
 						case 'end':
 							return _context.stop();
 					}
@@ -2069,7 +2082,7 @@ AFRAME.registerComponent('library-page', {
 							this.el.emit('pageupdatestart');
 							_context.prev = 1;
 							_context.next = 4;
-							return this.el.sceneEl.systems[this.data.service + '-service'].fakeGetListing(this.data.page);
+							return this.el.sceneEl.systems[this.data.service + '-service'].getListing(this.data.page);
 
 						case 4:
 							this.currentPage = _context.sent;
@@ -2104,15 +2117,19 @@ AFRAME.registerComponent('library-page', {
 AFRAME.registerComponent('library-item', {
 	schema: { type: 'int' },
 	init: function init() {
+		this.itemData = null;
+
 		this.el.parentElement.addEventListener('pageupdatestart', this.showLoading.bind(this));
 		this.el.parentElement.addEventListener('pageupdateend', this.updateContents.bind(this));
 		this.el.addEventListener('materialtextureloaded', this.updateDimensions.bind(this));
+
+		this.el.addEventListener('click', this.previewModel.bind(this));
 	},
 	showLoading: function showLoading() {
-		this.el.setAttribute('visible', false);
+		this.el.setAttribute('avr-visible', false);
 	},
 	updateContents: function updateContents() {
-		var itemData = this.el.parentElement.components['library-page'].currentPage.assets[this.data];
+		var itemData = this.itemData = this.el.parentElement.components['library-page'].currentPage.assets[this.data];
 		if (itemData) this.el.setAttribute('src', itemData.thumbnail.url);
 	},
 	updateDimensions: function updateDimensions() {
@@ -2126,8 +2143,15 @@ AFRAME.registerComponent('library-item', {
 			this.el.setAttribute('scale', { x: ratio, y: 1, z: 1 });
 		}
 
-		var itemData = this.el.parentElement.components['library-page'].currentPage.assets[this.data];
-		if (itemData) this.el.setAttribute('visible', true);else this.el.setAttribute('visible', false);
+		if (this.itemData) this.el.setAttribute('avr-visible', true);else this.el.setAttribute('avr-visible', false);
+	},
+
+	previewModel: function previewModel() {
+		var spawn = document.querySelector('#spawn_point');
+		var gltfUrls = this.itemData.formats.filter(function (x) {
+			return x.formatType === 'GLTF2';
+		});
+		spawn.setAttribute('src', gltfUrls[0].root.url);
 	}
 });
 
@@ -2135,7 +2159,7 @@ AFRAME.registerComponent('library-advance', {
 	schema: { type: 'int' },
 	init: function init() {
 		this.el.addEventListener('click', this.advance.bind(this));
-		this.el.parentElement.addEventListener('pageupdatestart', this.showLoading.bind(this));
+		//this.el.parentElement.addEventListener('pageupdatestart', this.showLoading.bind(this));
 		this.el.parentElement.addEventListener('pageupdateend', this.updatePaging.bind(this));
 	},
 	advance: function advance() {
@@ -2144,18 +2168,16 @@ AFRAME.registerComponent('library-advance', {
 		pageEl.setAttribute('library-page', 'page', oldPage + this.data);
 	},
 	showLoading: function showLoading() {
-		this.el.setAttribute('visible', false);
+		this.el.setAttribute('avr-visible', false);
 	},
 	updatePaging: function updatePaging() {
 		var page = this.el.parentElement.components['library-page'];
 		var service = this.el.sceneEl.systems['poly-service'];
 
 		if (service.pages[page.data.page + this.data] || this.data > 0 && page.currentPage.nextPageToken) {
-			console.log('showing');
-			this.el.setAttribute('visible', true);
+			this.el.setAttribute('avr-visible', true);
 		} else {
-			console.log('hiding');
-			this.el.setAttribute('visible', false);
+			this.el.setAttribute('avr-visible', false);
 		}
 	}
 });
@@ -2165,6 +2187,12 @@ function loadFile(url) {
 
 	return new _Promise(function (resolve, reject) {
 		loader.load(url, resolve, function () {}, reject);
+	});
+}
+
+function obj2array(obj, keys) {
+	return keys.map(function (k) {
+		return obj[k];
 	});
 }
 
@@ -2299,5 +2327,63 @@ AFRAME.registerSystem('poly-service', {
 	}()
 });
 
+AFRAME.registerComponent('avr-visible', {
+	schema: { type: 'boolean', default: true },
+	update: function update() {
+		var _this = this;
+
+		this.el.object3D.traverse(function (o) {
+			return o.visible = _this.data;
+		});
+	}
+});
+
+var scaleFactor = 1.2;
+
+AFRAME.registerComponent('hover-scale', {
+	init: function init() {
+		var _this = this;
+
+		// create animation
+		this.el.setAttribute('animation__hover', {
+			startEvents: ['hoverstart', 'mouseleave'],
+			property: 'scale',
+			dir: 'alternate',
+			easing: 'easeOutQuad',
+			dur: 200
+		});
+
+		// update scale
+		this.el.addEventListener('mouseenter', function () {
+			var smallScale = obj2array(_this.el.getAttribute('scale'), ['x', 'y', 'z']);
+			var bigScale = smallScale.map(function (x) {
+				return x * scaleFactor;
+			});
+			_this.el.setAttribute('animation__hover', { from: smallScale.join(' '), to: bigScale.join(' ') });
+
+			_this.el.emit('hoverstart');
+		});
+	}
+});
+
+AFRAME.registerComponent('maintain-size', {
+	schema: { type: 'vec3' },
+	init: function init() {
+		this.el.addEventListener('model-loaded', this.rescale.bind(this));
+	},
+	rescale: function rescale() {
+		this.el.setAttribute('position', { x: 0, y: 0, z: 0 });
+		this.el.setAttribute('scale', { x: 1, y: 1, z: 1 });
+
+		var box = new AFRAME.THREE.Box3();
+		box.setFromObject(this.el.object3D);
+		var size = box.getSize(),
+		    center = box.getCenter().sub(this.el.object3D.getWorldPosition());
+		var ratio = Math.min(this.data.x / size.x, this.data.y / size.y, this.data.z / size.z);
+
+		this.el.setAttribute('scale', { x: ratio, y: ratio, z: ratio });
+		this.el.setAttribute('position', center.multiplyScalar(-ratio));
+	}
+});
+
 }());
-//# sourceMappingURL=bundle.js.map

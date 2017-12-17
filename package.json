@@ -4,6 +4,7 @@
   "description": "Customze a space with photos and 3d models",
   "main": "index.html",
   "scripts": {
+    "start": "gulp start-dev",
     "build": "gulp build",
     "build-dev": "gulp build-dev",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -35,5 +36,9 @@
     "rollup-plugin-node-resolve": "^3.0.0",
     "rollup-plugin-uglify": "^2.0.1",
     "rollup-watch": "^4.3.1"
+  },
+  "dependencies": {
+    "gulp-connect": "^5.0.0",
+    "gulp-open": "^2.0.0"
   }
 }
